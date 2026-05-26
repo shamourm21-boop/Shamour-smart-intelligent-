@@ -1,0 +1,24 @@
+app = "shredded-fitness"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[env]
+  PORT = "8080"
+  FLASK_ENV = "production"
+  SHREDDED_DB = "/data/shredded.db"
+
+[mounts]
+  source = "shredded_data"
+  destination = "/data"
