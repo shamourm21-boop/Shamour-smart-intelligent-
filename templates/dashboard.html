@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SHREDDED{% endblock %}
+
+{% block content %}
+
+{% if active %}
+<div class="flash flash-success flex items-center justify-between">
+  <span>⚡ Session active: <strong>{{ active.name or 'Unnamed' }}</strong></span>
+  <a href="/workout" class="btn btn-primary btn-sm">Continue →</a>
+</div>
+{% endif %}
+
+<!-- Hero -->
+<div class="hero">
+  {% if prog_name %}
+  <div class="hero-label">{{ prog_name }} · Week {{ week }} · Day {{ day }}</div>
+  {% else %}
+  <div class="hero-label">No Program Active</div>
+  {% endif %}
+
+  {% if today_workout %}
+  <div class="hero-title">{{ today_workout.label }}</div>
+  <div class="hero-sub">{{ today_workout.exercises | length }} exercises planned today</div>
+  {% else %}
+  <div class="hero-title">Ready to Train?</div>
+  <div class="hero-sub">Start a session and get to work.</div>
+  {% endif %}
+
+  {% if active %}
+  <a href="/workout" class="btn btn-primary btn-lg">Continue Session →</a>
+  {% else %}
+  <button class="btn btn-primary btn-lg" onclick="startSession()">Start Today's Workout</button>
+  {% endif %}
+</div>
+
+<!-- Stats row -->
+<div class="grid-4 mb-lg">
+  <div class="card card-sm">
+    <div class="card-title">Total Sessions</div>
+    <div class="card-value">{{ total_sessions }}<span class="card-value-unit">sessions</span></div>
+  </div>
+  <div class="card card-sm">
+    <div class="card-title">Current Week</div>
+    <div class="card-value">{{ week }}<span class="card-value-unit">of {{ 12 }}</span></div>
+  </div>
+  <div class="card card-sm">
+    <div class="card-title">Body Weight</div>
+    <div class="card-value">
+      {% if latest_weight %}{{ latest_weight }}<span class="card-value-unit">kg</span>
+      {% else %}<span style="font-size:1.25rem;color:var(--muted)">—</span>{% endif %}
+    </div>
+  </div>
+  <div class="card card-sm">
+    <div class="card-title">PRs Tracked</div>
+    <div class="card-value">{{ prs | length }}<span class="card-value-unit">lifts</span></div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Today's Plan -->
+  {% if today_workout %}
+  <div class="card">
+    <div class="section-title">Today's Plan</div>
+    {% for ex in today_workout.exercises %}
+    <div class="ex-plan-row">
+      <div>
+        <div class="ex-plan-name">{{ ex.name }}</div>
+        {% if ex.note %}<div class="ex-plan-detail">{{ ex.note }}</div>{% endif %}
+      </div>
+      <div class="ex-plan-meta">{{ ex.sets }} × {{ ex.reps }}</div>
+    </div>
+    {% endfor %}
+    <div class="mt-md">
+      {% if not active %}
+      <button class="btn btn-primary" onclick="startSession()">Start This Workout</button>
+      {% else %}
+      <a href="/workout" class="btn btn-primary">Continue Session →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="section-title">Program</div>
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <p>No program active.<br>
+        <a href="/program" class="text-red">Set up a program →</a>
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Recent Sessions -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-md">
+      <div class="section-title" style="margin-bottom:0">Recent Sessions</div>
+      <a href="/history" class="text-muted text-sm">View all →</a>
+    </div>
+    {% if recent %}
+    {% for s in recent %}
+    <a href="/history/{{ s.id }}" style="text-decoration:none;display:block;">
+      <div class="exercise-row" style="padding:0.7rem 0.85rem;margin-bottom:0.35rem;border:1px solid var(--border);border-radius:8px;border-left:3px solid var(--primary)">
+        <div style="flex:1">
+          <div class="fw-600 text-sm">{{ s.name or 'Workout' }}</div>
+          <div class="text-xs text-muted">{{ s.started_at[:10] }} · {{ s.set_count or 0 }} sets · {{ '{:,.0f}'.format(s.volume or 0) }} kg</div>
+        </div>
+        <div class="text-xs text-muted">{{ duration(s) }}</div>
+      </div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">🏋️</div>
+      <p>No sessions yet. Start your first workout!</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- PRs row -->
+{% if prs %}
+<div class="section-title mt-lg">Top Personal Records</div>
+<div class="grid-3">
+  {% for pr in prs[:6] %}
+  <div class="pr-card">
+    <div class="pr-name">{{ pr.exercise }}</div>
+    {% if pr.weight_kg and pr.reps %}
+    <div class="pr-value">{{ "%.1f"|format(epley(pr.weight_kg, pr.reps)) }} <span style="font-size:1rem;color:var(--muted)">kg 1RM</span></div>
+    <div class="pr-sub">{{ pr.weight_kg }}kg × {{ pr.reps }} · {{ pr.logged_at[:10] }}</div>
+    {% elif pr.reps %}
+    <div class="pr-value">{{ pr.reps }} <span style="font-size:1rem;color:var(--muted)">reps</span></div>
+    <div class="pr-sub">{{ pr.logged_at[:10] }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Start session modal -->
+<div id="start-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-title">Start Workout</div>
+    <div class="form-group mb-md">
+      <label>Session Name (optional)</label>
+      <input id="session-name" type="text" placeholder="e.g. Push Day, Leg Day..." />
+    </div>
+    <div class="flex gap-md">
+      <button class="btn btn-primary" onclick="confirmStart()">Let's Go →</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function startSession() {
+  document.getElementById('start-modal').classList.remove('hidden');
+  document.getElementById('session-name').focus();
+}
+function closeModal() {
+  document.getElementById('start-modal').classList.add('hidden');
+}
+async function confirmStart() {
+  const name = document.getElementById('session-name').value.trim();
+  try {
+    await api('POST', '/api/session/start', { name });
+    window.location.href = '/workout';
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+document.getElementById('start-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+{% endblock %}

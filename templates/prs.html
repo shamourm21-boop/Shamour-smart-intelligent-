@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}PRs — SHREDDED{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">Personal Records</div>
+  <div class="page-subtitle">Your all-time best sets with Epley estimated 1RM</div>
+</div>
+
+{% if records %}
+<div class="grid-3">
+  {% for pr in records %}
+  <div class="pr-card" onclick="window.location='/progress?exercise={{ pr.exercise|urlencode }}'" style="cursor:pointer">
+    <div class="pr-name">{{ pr.exercise }}</div>
+    {% if pr.weight_kg and pr.reps %}
+      <div class="pr-value">{{ "%.1f"|format(epley(pr.weight_kg, pr.reps)) }} <span style="font-size:1rem;color:var(--muted)">kg</span></div>
+      <div class="pr-sub">{{ pr.weight_kg }}kg × {{ pr.reps }} reps · {{ pr.logged_at[:10] }}</div>
+    {% elif pr.reps %}
+      <div class="pr-value">{{ pr.reps }} <span style="font-size:1rem;color:var(--muted)">reps</span></div>
+      <div class="pr-sub">Bodyweight · {{ pr.logged_at[:10] }}</div>
+    {% elif pr.duration_s %}
+      <div class="pr-value">{{ pr.duration_s }} <span style="font-size:1rem;color:var(--muted)">s</span></div>
+      <div class="pr-sub">{{ pr.logged_at[:10] }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">🏆</div>
+  <p>No records yet. Log some sets to start tracking PRs!</p>
+</div>
+{% endif %}
+{% endblock %}

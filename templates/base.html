@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SHREDDED{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-brand" href="/">⚡ SHREDDED</a>
+  <ul class="nav-links">
+    <li><a href="/"          {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a></li>
+    <li><a href="/workout"   {% if request.path == '/workout' %}class="active"{% endif %}>Workout</a></li>
+    <li><a href="/history"   {% if request.path.startswith('/history') %}class="active"{% endif %}>History</a></li>
+    <li><a href="/prs"       {% if request.path == '/prs' %}class="active"{% endif %}>PRs</a></li>
+    <li><a href="/progress"  {% if request.path == '/progress' %}class="active"{% endif %}>Progress</a></li>
+    <li><a href="/stats"     {% if request.path == '/stats' %}class="active"{% endif %}>Body Stats</a></li>
+    <li><a href="/program"   {% if request.path == '/program' %}class="active"{% endif %}>Program</a></li>
+  </ul>
+  <a class="nav-pill" href="/workout">+ Log Set</a>
+</nav>
+
+<main class="main">
+  {% block content %}{% endblock %}
+</main>
+
+<div id="toast-container"></div>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
