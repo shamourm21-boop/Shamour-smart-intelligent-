@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}Workout — SHREDDED{% endblock %}
+
+{% block content %}
+
+{% if not active %}
+<!-- No active session -->
+<div class="page-header">
+  <div class="page-title">Workout</div>
+  <div class="page-subtitle">No active session</div>
+</div>
+
+<div class="card" style="max-width:480px">
+  <div class="section-title">Start a Session</div>
+  <div class="form-group mb-md">
+    <label>Session Name (optional)</label>
+    <input id="session-name" type="text" placeholder="Push Day, Leg Day..." />
+  </div>
+  <button class="btn btn-primary btn-lg" onclick="doStart()">Start Workout →</button>
+  <a href="/" class="btn btn-ghost" style="margin-left:0.75rem">Cancel</a>
+</div>
+
+{% else %}
+<!-- Active session -->
+<div class="flex justify-between items-center mb-md">
+  <div>
+    <div class="page-title" style="font-size:1.75rem">{{ active.name or 'Workout' }}</div>
+    <div class="text-muted text-sm">Started {{ active.started_at[11:16] }} · <span class="timer" id="session-timer">0:00</span></div>
+  </div>
+  <button class="btn btn-danger" onclick="openFinishModal()">Finish Workout</button>
+</div>
+
+<div class="workout-grid">
+
+  <!-- LEFT: Today's plan -->
+  <div>
+    <div id="plan-card" class="card">
+      <div class="section-title">Today's Plan</div>
+      <div id="plan-list">
+        <div class="text-muted text-sm">Loading plan…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Logger + logged sets -->
+  <div>
+    <!-- Log set form -->
+    <div class="card mb-md">
+      <div class="section-title">Log a Set</div>
+
+      <div class="form-group mb-md autocomplete-wrap">
+        <label>Exercise</label>
+        <input id="ex-input" type="text" placeholder="Search exercise…" autocomplete="off" />
+        <div id="ex-list" class="autocomplete-list hidden"></div>
+      </div>
+
+      <div class="input-row-3 mb-md">
+        <div class="form-group">
+          <label>Reps</label>
+          <input id="reps-input" type="number" placeholder="0" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Weight (kg)</label>
+          <input id="weight-input" type="number" placeholder="0" min="0" step="0.5" />
+        </div>
+        <div class="form-group">
+          <label>RPE</label>
+          <input id="rpe-input" type="number" placeholder="—" min="1" max="10" step="0.5" />
+        </div>
+      </div>
+
+      <div class="flex gap-md items-center">
+        <div class="flex gap-sm items-center">
+          <input type="checkbox" id="warmup-cb" style="width:auto;accent-color:var(--primary)" />
+          <label for="warmup-cb" style="font-size:0.85rem;text-transform:none;letter-spacing:0;color:var(--muted)">Warm-up</label>
+        </div>
+        <button class="btn btn-primary" style="flex:1" onclick="logSet()">+ Log Set</button>
+      </div>
+
+      <div id="one-rm-hint" class="text-xs text-muted mt-sm" style="min-height:1.2em"></div>
+    </div>
+
+    <!-- Logged sets -->
+    <div class="card">
+      <div class="flex justify-between items-center mb-md">
+        <div class="section-title" style="margin:0">Logged Sets</div>
+        <div class="text-muted text-xs" id="sets-count">0 sets</div>
+      </div>
+      <div id="sets-list">
+        <div class="empty-state" style="padding:2rem 0">
+          <div class="empty-state-icon">📝</div>
+          <p>No sets logged yet.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Finish modal -->
+<div id="finish-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-title">Finish Workout</div>
+    <div class="form-group mb-md">
+      <label>Post-workout Notes (optional)</label>
+      <textarea id="finish-notes" rows="3" placeholder="How did it go?" style="resize:vertical"></textarea>
+    </div>
+    <div class="flex gap-md">
+      <button class="btn btn-primary" onclick="finishSession()">Save &amp; Finish</button>
+      <button class="btn btn-ghost" onclick="closeFinishModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+{% if not active %}
+async function doStart() {
+  const name = document.getElementById('session-name').value.trim();
+  try {
+    await api('POST', '/api/session/start', { name });
+    window.location.href = '/workout';
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+{% else %}
+// ── Timer ─────────────────────────────────────────────────────────────────────
+startTimer('{{ active.started_at }}');
+
+// ── Today's plan ──────────────────────────────────────────────────────────────
+(async () => {
+  const plan = await fetch('/api/today').then(r => r.json()).catch(() => null);
+  const el = document.getElementById('plan-list');
+  if (!plan || !plan.exercises.length) {
+    el.innerHTML = '<div class="text-muted text-sm">No plan for today — freestyle it.</div>';
+    return;
+  }
+  document.querySelector('#plan-card .section-title').textContent =
+    `Week ${plan.week} · Day ${plan.day}`;
+  el.innerHTML = plan.exercises.map(ex => `
+    <div class="ex-plan-row" onclick="pickExercise('${ex.name.replace(/'/g,"\\'")}')">
+      <div>
+        <div class="ex-plan-name">${ex.name}</div>
+        ${ex.note ? `<div class="ex-plan-detail">${ex.note}</div>` : ''}
+      </div>
+      <div class="ex-plan-meta">${ex.sets} × ${ex.reps}</div>
+    </div>
+  `).join('');
+})();
+
+function pickExercise(name) {
+  document.getElementById('ex-input').value = name;
+  document.getElementById('reps-input').focus();
+}
+
+// ── Autocomplete ──────────────────────────────────────────────────────────────
+initAutocomplete('ex-input', 'ex-list', () => {
+  document.getElementById('reps-input').focus();
+});
+
+// ── 1RM hint ──────────────────────────────────────────────────────────────────
+['reps-input','weight-input'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateHint);
+});
+
+function updateHint() {
+  const w = parseFloat(document.getElementById('weight-input').value);
+  const r = parseInt(document.getElementById('reps-input').value);
+  const hint = document.getElementById('one-rm-hint');
+  const rm = epley(w, r);
+  hint.textContent = rm ? `Estimated 1RM: ~${rm} kg` : '';
+}
+
+// ── Log set ───────────────────────────────────────────────────────────────────
+async function logSet() {
+  const exercise  = document.getElementById('ex-input').value.trim();
+  const reps      = parseInt(document.getElementById('reps-input').value) || null;
+  const weight_kg = parseFloat(document.getElementById('weight-input').value) || null;
+  const rpe       = parseFloat(document.getElementById('rpe-input').value) || null;
+  const is_warmup = document.getElementById('warmup-cb').checked;
+
+  if (!exercise) { toast('Enter an exercise name', 'error'); return; }
+  if (!reps && !weight_kg) { toast('Enter reps or weight', 'error'); return; }
+
+  try {
+    const res = await api('POST', '/api/set/log', { exercise, reps, weight_kg, rpe, is_warmup });
+    toast(`Set ${res.set_number} — ${exercise}${reps ? ' ×'+reps : ''}${weight_kg ? ' @ '+weight_kg+'kg' : ''}${res.one_rm ? '  →  ~'+res.one_rm+'kg 1RM' : ''}`);
+    // Clear reps/weight, keep exercise
+    document.getElementById('reps-input').value = '';
+    document.getElementById('weight-input').value = '';
+    document.getElementById('rpe-input').value = '';
+    document.getElementById('warmup-cb').checked = false;
+    document.getElementById('one-rm-hint').textContent = '';
+    await refreshSets();
+    document.getElementById('reps-input').focus();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// Log set on Enter in weight field
+document.getElementById('weight-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') logSet();
+});
+document.getElementById('reps-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('weight-input').focus();
+});
+
+// ── Refresh sets list ─────────────────────────────────────────────────────────
+async function refreshSets() {
+  const data = await fetch('/api/session/active').then(r => r.json());
+  if (!data) return;
+  const sets = data.sets;
+  const el = document.getElementById('sets-list');
+  document.getElementById('sets-count').textContent = `${sets.length} set${sets.length !== 1 ? 's' : ''}`;
+
+  if (!sets.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:2rem 0">
+      <div class="empty-state-icon">📝</div><p>No sets logged yet.</p></div>`;
+    return;
+  }
+
+  // Group by exercise
+  const grouped = {};
+  sets.forEach(s => { (grouped[s.exercise] = grouped[s.exercise] || []).push(s); });
+
+  el.innerHTML = Object.entries(grouped).map(([ex, exSets]) => {
+    const rows = exSets.map(s => {
+      const detail = [
+        s.reps ? `${s.reps} reps` : null,
+        s.weight_kg ? `${s.weight_kg} kg` : null,
+        s.duration_s ? `${s.duration_s}s` : null,
+        s.rpe ? `RPE ${s.rpe}` : null,
+        s.is_warmup ? '<span class="badge badge-gray">warm-up</span>' : null,
+      ].filter(Boolean).join(' · ');
+      return `<div class="set-item">
+        <div class="set-num">S${s.set_number}</div>
+        <div class="set-info"><div class="set-detail">${detail}</div></div>
+        <button class="set-del" onclick="deleteSet(${s.id})" title="Delete set">✕</button>
+      </div>`;
+    }).join('');
+
+    const vol = exSets.filter(s=>!s.is_warmup)
+      .reduce((a, s) => a + (s.weight_kg||0)*(s.reps||0), 0);
+
+    return `<div style="margin-bottom:1rem">
+      <div class="flex justify-between items-center mb-sm">
+        <div class="fw-600 text-sm">${ex}</div>
+        <div class="text-xs text-muted">${vol > 0 ? vol.toFixed(0)+' kg vol' : ''}</div>
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+}
+
+async function deleteSet(id) {
+  try {
+    await api('DELETE', `/api/set/${id}`);
+    await refreshSets();
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// Initial load
+refreshSets();
+
+// ── Finish ────────────────────────────────────────────────────────────────────
+function openFinishModal() {
+  document.getElementById('finish-modal').classList.remove('hidden');
+  document.getElementById('finish-notes').focus();
+}
+function closeFinishModal() {
+  document.getElementById('finish-modal').classList.add('hidden');
+}
+
+async function finishSession() {
+  const notes = document.getElementById('finish-notes').value.trim();
+  try {
+    const res = await api('POST', '/api/session/finish', { notes });
+    toast(`Session complete! ${res.set_count} sets · ${Math.round(res.volume)} kg total`);
+    setTimeout(() => window.location.href = '/', 1200);
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+document.getElementById('finish-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFinishModal();
+});
+{% endif %}
+</script>
+{% endblock %}

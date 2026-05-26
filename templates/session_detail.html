@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Session — SHREDDED{% endblock %}
+
+{% block content %}
+<div class="flex items-center gap-md mb-lg">
+  <a href="/history" class="btn btn-ghost btn-sm">← Back</a>
+  <div>
+    <div class="page-title" style="font-size:1.75rem">{{ session.name or 'Workout' }}</div>
+    <div class="text-muted text-sm">{{ session.started_at[:10] }} · {{ session.duration }}</div>
+  </div>
+</div>
+
+{% set ns = namespace(total_vol=0, total_sets=0) %}
+{% for ex_name, ex_sets in grouped.items() %}
+  {% for s in ex_sets %}
+    {% if not s.is_warmup %}
+      {% set ns.total_vol = ns.total_vol + (s.weight_kg or 0) * (s.reps or 0) %}
+      {% set ns.total_sets = ns.total_sets + 1 %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
+<div class="grid-3 mb-lg">
+  <div class="card card-sm">
+    <div class="card-title">Exercises</div>
+    <div class="card-value">{{ grouped | length }}</div>
+  </div>
+  <div class="card card-sm">
+    <div class="card-title">Work Sets</div>
+    <div class="card-value">{{ ns.total_sets }}</div>
+  </div>
+  <div class="card card-sm">
+    <div class="card-title">Total Volume</div>
+    <div class="card-value">{{ '{:,.0f}'.format(ns.total_vol) }}<span class="card-value-unit">kg</span></div>
+  </div>
+</div>
+
+{% if session.notes %}
+<div class="card mb-lg">
+  <div class="card-title">Notes</div>
+  <div>{{ session.notes }}</div>
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Exercise</th>
+        <th class="td-center">Set</th>
+        <th class="td-right">Reps</th>
+        <th class="td-right">Weight</th>
+        <th class="td-right">Volume</th>
+        <th class="td-right">Est. 1RM</th>
+        <th class="td-center">Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ex_name, ex_sets in grouped.items() %}
+      {% for s in ex_sets %}
+      <tr>
+        {% if loop.first %}<td class="td-bold" rowspan="{{ ex_sets|length }}">{{ ex_name }}</td>{% endif %}
+        <td class="td-center td-muted">{{ s.set_number }}</td>
+        <td class="td-right">{{ s.reps or '—' }}</td>
+        <td class="td-right">{% if s.weight_kg %}{{ s.weight_kg }} kg{% else %}BW{% endif %}</td>
+        <td class="td-right td-muted">
+          {% if s.weight_kg and s.reps %}{{ '{:,.0f}'.format(s.weight_kg * s.reps) }} kg{% else %}—{% endif %}
+        </td>
+        <td class="td-right">
+          {% if s.weight_kg and s.reps %}
+            <span class="text-red fw-600">~{{ "%.1f"|format(epley(s.weight_kg, s.reps)) }} kg</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="td-center">
+          {% if s.is_warmup %}<span class="badge badge-gray">warm-up</span>
+          {% else %}<span class="badge badge-red">work</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

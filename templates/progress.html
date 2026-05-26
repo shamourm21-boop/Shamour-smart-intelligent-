@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Progress — SHREDDED{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">Progress</div>
+  <div class="page-subtitle">Track your strength gains over time</div>
+</div>
+
+<div class="card mb-lg">
+  <div class="flex gap-md items-center" style="flex-wrap:wrap">
+    <div class="form-group autocomplete-wrap" style="flex:1;min-width:200px">
+      <label>Exercise</label>
+      <input id="ex-input" type="text" placeholder="Search exercise…" autocomplete="off"
+             value="{{ selected }}" />
+      <div id="ex-list" class="autocomplete-list hidden"></div>
+    </div>
+    <div style="padding-top:1.4rem">
+      <button class="btn btn-primary" onclick="loadChart()">Load Chart</button>
+    </div>
+  </div>
+</div>
+
+<div id="chart-section" class="{% if not selected %}hidden{% endif %}">
+  <div class="grid-2 mb-lg" id="chart-stats"></div>
+  <div class="card" style="position:relative">
+    <canvas id="chart" height="320"></canvas>
+  </div>
+</div>
+
+<div id="empty-msg" class="empty-state {% if selected %}hidden{% endif %}">
+  <div class="empty-state-icon">📈</div>
+  <p>Select an exercise above to see your progress chart.</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let chart = null;
+
+initAutocomplete('ex-input', 'ex-list', name => { loadChart(name); });
+
+{% if selected %}
+loadChart('{{ selected }}');
+{% endif %}
+
+async function loadChart(name) {
+  const ex = name || document.getElementById('ex-input').value.trim();
+  if (!ex) { toast('Enter an exercise name', 'error'); return; }
+
+  const data = await fetch(`/api/progress/${encodeURIComponent(ex)}`).then(r => r.json());
+
+  if (!data.length) {
+    toast(`No data for "${ex}"`, 'error');
+    return;
+  }
+
+  document.getElementById('chart-section').classList.remove('hidden');
+  document.getElementById('empty-msg').classList.add('hidden');
+
+  // Stats
+  const rms    = data.filter(d => d.estimated_1rm).map(d => d.estimated_1rm);
+  const maxRM  = rms.length ? Math.max(...rms).toFixed(1) : '—';
+  const minRM  = rms.length ? Math.min(...rms).toFixed(1) : '—';
+  const change = (rms.length >= 2) ? (rms[rms.length-1] - rms[0]).toFixed(1) : null;
+
+  document.getElementById('chart-stats').innerHTML = `
+    <div class="card card-sm">
+      <div class="card-title">Peak Estimated 1RM</div>
+      <div class="card-value">${maxRM}<span class="card-value-unit">kg</span></div>
+    </div>
+    <div class="card card-sm">
+      <div class="card-title">Total Progress</div>
+      <div class="card-value" style="color:${change >= 0 ? 'var(--success)' : 'var(--primary)'}">
+        ${change !== null ? (change >= 0 ? '+' : '') + change : '—'}<span class="card-value-unit">kg</span>
+      </div>
+    </div>
+  `;
+
+  const labels = data.map(d => d.date);
+  const vals   = data.map(d => d.estimated_1rm || d.weight_kg);
+
+  if (chart) chart.destroy();
+
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: `${ex} — Est. 1RM (kg)`,
+        data: vals,
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220,38,38,0.08)',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#dc2626',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        fill: true,
+        tension: 0.35,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#888', font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#181818',
+          borderColor: '#333',
+          borderWidth: 1,
+          titleColor: '#f0f0f0',
+          bodyColor: '#888',
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.y.toFixed(1)} kg`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#555', maxTicksLimit: 8 },
+          grid: { color: '#1e1e1e' },
+        },
+        y: {
+          ticks: { color: '#555', callback: v => v + ' kg' },
+          grid: { color: '#1e1e1e' },
+        },
+      },
+    },
+  });
+}
+</script>
+{% endblock %}
